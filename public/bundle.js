@@ -745,7 +745,84 @@ function ta({listing:e,seller:t,isFavorited:n,onFavoriteToggle:r}){if(!e)return 
 
   const result = Object.values(map);
   return result.filter(c => c.is_active !== !1).sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
-}async function $c(){try{const{data:e,error:t}=await L.from("locations").select("*").eq("is_active",!0);if(!t&&e&&e.length>0){return e.sort((a,b)=>a.name.localeCompare(b.name))}if(t)throw t}catch(err){console.warn("Locations load err",err)}return []}async function Vp(e={}){  let list = [];  let deletedIds = [];  let overrides = {};  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}  try {    let t = L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("status", "active");    if (e.search) t = t.or(`title.ilike.%${e.search}%,description.ilike.%${e.search}%`);    if (e.categoryId) t = t.eq("category_id", e.categoryId);    if (e.locationId) t = t.eq("location_id", e.locationId);    if (e.condition) t = t.eq("condition", e.condition);    if (e.minPrice !== void 0) t = t.gte("price", e.minPrice);    if (e.maxPrice !== void 0) t = t.lte("price", e.maxPrice);    switch (e.sortBy) {      case "price_asc": t = t.order("price", { ascending: !0 }); break;      case "price_desc": t = t.order("price", { ascending: !1 }); break;      case "featured": t = t.order("is_featured", { ascending: !1 }); break;      default: t = t.order("is_featured", { ascending: !1 }).order("created_at", { ascending: !1 });    }    t = t.order("created_at", { ascending: !1 });    if (e.limit) t = t.limit(e.limit);    if (e.offset) t = t.range(e.offset, e.offset + (e.limit || 20) - 1);    const { data: n, error: r } = await t;    if (!r && n && n.length > 0) {      list = n;    } else {      let tSimple = L.from("listings").select("*").eq("status", "active");      if (e.categoryId) tSimple = tSimple.eq("category_id", e.categoryId);      if (e.locationId) tSimple = tSimple.eq("location_id", e.locationId);      const { data: nSimple } = await tSimple.order("created_at", { ascending: !1 });      if (nSimple && nSimple.length > 0) list = nSimple;    }  } catch(err) {    try {      const { data: nSimple } = await L.from("listings").select("*").eq("status", "active").order("created_at", { ascending: !1 });      if (nSimple && nSimple.length > 0) list = nSimple;    } catch(err2) {}  }  try {    const custom = JSON.parse(localStorage.getItem("user_custom_listings") || "[]")      .filter(l => l && (l.status === "active" || !l.status) && !deletedIds.includes(l.id));    const map = {};    list.forEach(l => { if (l && l.id && !deletedIds.includes(l.id)) map[l.id] = l; });    custom.forEach(l => { if (l && l.id && !deletedIds.includes(l.id)) map[l.id] = l; });    list = Object.values(map);  } catch(err) {}  let approvedTopProListingIds = new Set();
+}async function $c(){try{const{data:e,error:t}=await L.from("locations").select("*").eq("is_active",!0);if(!t&&e&&e.length>0){return e.sort((a,b)=>a.name.localeCompare(b.name))}if(t)throw t}catch(err){console.warn("Locations load err",err)}return []}async function Vp(e={}){
+  let list = [];
+  let deletedIds = [];
+  let overrides = {};
+  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}
+  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}
+  try {
+    const { data: sysRows } = await L.from("listings").select("title, description").in("title", ["[SYS_DELETED_LISTING]", "[SYS_APP_CONFIG]"]).order("created_at", { ascending: false }).limit(300);
+    if (sysRows && Array.isArray(sysRows)) {
+      sysRows.forEach(function(row) {
+        if (!row || !row.description) return;
+        try {
+          const parsed = JSON.parse(row.description);
+          if (row.title === "[SYS_DELETED_LISTING]" && parsed && parsed.deleted_id) {
+            if (!deletedIds.includes(parsed.deleted_id)) deletedIds.push(parsed.deleted_id);
+          }
+          if (parsed && Array.isArray(parsed.deleted_listing_ids)) {
+            parsed.deleted_listing_ids.forEach(function(dId) {
+              if (dId && !deletedIds.includes(dId)) deletedIds.push(dId);
+            });
+          }
+        } catch(e) {}
+      });
+      try { localStorage.setItem("deleted_listing_ids", JSON.stringify(deletedIds)); } catch(e) {}
+    }
+  } catch(err) {}
+  try {
+    let t = L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("status", "active");
+    if (e.search) t = t.or(`title.ilike.%${e.search}%,description.ilike.%${e.search}%`);
+    if (e.categoryId) t = t.eq("category_id", e.categoryId);
+    if (e.locationId) t = t.eq("location_id", e.locationId);
+    if (e.condition) t = t.eq("condition", e.condition);
+    if (e.minPrice !== void 0) t = t.gte("price", e.minPrice);
+    if (e.maxPrice !== void 0) t = t.lte("price", e.maxPrice);
+    switch (e.sortBy) {
+      case "price_asc": t = t.order("price", { ascending: !0 }); break;
+      case "price_desc": t = t.order("price", { ascending: !1 }); break;
+      case "featured": t = t.order("is_featured", { ascending: !1 }); break;
+      default: t = t.order("is_featured", { ascending: !1 }).order("created_at", { ascending: !1 });
+    }
+    t = t.order("created_at", { ascending: !1 });
+    if (e.limit) t = t.limit(e.limit);
+    if (e.offset) t = t.range(e.offset, e.offset + (e.limit || 20) - 1);
+    const { data: n, error: r } = await t;
+    if (!r && n && n.length > 0) {
+      list = n;
+    } else {
+      let tSimple = L.from("listings").select("*").eq("status", "active");
+      if (e.categoryId) tSimple = tSimple.eq("category_id", e.categoryId);
+      if (e.locationId) tSimple = tSimple.eq("location_id", e.locationId);
+      const { data: nSimple } = await tSimple.order("created_at", { ascending: !1 });
+      if (nSimple && nSimple.length > 0) list = nSimple;
+    }
+  } catch(err) {
+    try {
+      const { data: nSimple } = await L.from("listings").select("*").eq("status", "active").order("created_at", { ascending: !1 });
+      if (nSimple && nSimple.length > 0) list = nSimple;
+    } catch(err2) {}
+  }
+  list.forEach(function(item) {
+    if (item && item.title === "[SYS_DELETED_LISTING]" && item.description) {
+      try {
+        const parsed = JSON.parse(item.description);
+        if (parsed && parsed.deleted_id && !deletedIds.includes(parsed.deleted_id)) {
+          deletedIds.push(parsed.deleted_id);
+        }
+      } catch(e) {}
+    }
+  });
+  try {
+    const custom = JSON.parse(localStorage.getItem("user_custom_listings") || "[]")
+      .filter(l => l && (l.status === "active" || !l.status) && !deletedIds.includes(l.id));
+    const map = {};
+    list.forEach(l => { if (l && l.id && !deletedIds.includes(l.id)) map[l.id] = l; });
+    custom.forEach(l => { if (l && l.id && !deletedIds.includes(l.id)) map[l.id] = l; });
+    list = Object.values(map);
+  } catch(err) {}
+  let approvedTopProListingIds = new Set();
   let approvedTopProTitles = new Set();
   let pendingOrRejectedTopProIds = new Set();
   let pendingOrRejectedTopProTitles = new Set();
@@ -772,7 +849,6 @@ function ta({listing:e,seller:t,isFavorited:n,onFavoriteToggle:r}){if(!e)return 
       }
     });
   } catch(e) {}
-
   list.forEach(l => {
     if (overrides[l.id]) {
       if (overrides[l.id].status) l.status = overrides[l.id].status;
@@ -788,7 +864,36 @@ function ta({listing:e,seller:t,isFavorited:n,onFavoriteToggle:r}){if(!e)return 
       if (approvedTopProListingIds.has(l.id) || approvedTopProTitles.has(lTitleLower)) {
         l.is_featured = true;
       }
-    }    if (!l.location || !l.location.name || l.location.name === "Unknown") {      const formatted = formatListingLocation(l);      l.location = { id: l.location_id || "loc_1", name: formatted, state: l.state || "Meghalaya", district: l.district || "West Garo Hills", town: l.town || "Tura" };      l.location_name = formatted;    }  });  let s = list.filter(i => i && i.title && !deletedIds.includes(i.id) && i.status !== "deleted" && i.status !== "rejected");  if (e.search) {    const q = e.search.toLowerCase();    s = s.filter(i => (i.title && i.title.toLowerCase().includes(q)) || (i.description && i.description.toLowerCase().includes(q)) || (i.address && i.address.toLowerCase().includes(q)) || (i.town && i.town.toLowerCase().includes(q)) || (i.district && i.district.toLowerCase().includes(q)) || (i.state && i.state.toLowerCase().includes(q)) || (i.location_name && i.location_name.toLowerCase().includes(q)) || (i.location && i.location.name && i.location.name.toLowerCase().includes(q)));  }  if (e.categoryId) {    s = s.filter(i => i.category_id === e.categoryId || (i.category && i.category.id === e.categoryId));  }  if (e.locationId) {    s = s.filter(i => i.location_id === e.locationId || (i.location && i.location.id === e.locationId));  }  if (e.proOnly) {    s = s.filter(i => i.seller && Ct(i.seller));  }  const seenU = new Set();
+    }
+    if (!l.location || !l.location.name || l.location.name === "Unknown") {
+      const formatted = formatListingLocation(l);
+      l.location = { id: l.location_id || "loc_1", name: formatted, state: l.state || "Meghalaya", district: l.district || "West Garo Hills", town: l.town || "Tura" };
+      l.location_name = formatted;
+    }
+  });
+  const isInvalidOrSys = (i) => {
+    if (!i || !i.id || !i.title) return true;
+    const titleStr = String(i.title).trim();
+    if (titleStr.startsWith("[SYS_") || titleStr.startsWith("SYS_") || titleStr.includes("[SYS_") || titleStr.includes("SYS_DELETED_LISTING") || titleStr.includes("SYS_RECHARGE") || titleStr.includes("SYS_APP_CONFIG") || titleStr.includes("SYS_TOP_PRO")) return true;
+    if (i.status === "deleted" || i.status === "rejected" || i.is_deleted === true) return true;
+    if (deletedIds.includes(i.id)) return true;
+    return false;
+  };
+  let s = list.filter(i => !isInvalidOrSys(i));
+  if (e.search) {
+    const q = e.search.toLowerCase();
+    s = s.filter(i => (i.title && i.title.toLowerCase().includes(q)) || (i.description && i.description.toLowerCase().includes(q)) || (i.address && i.address.toLowerCase().includes(q)) || (i.town && i.town.toLowerCase().includes(q)) || (i.district && i.district.toLowerCase().includes(q)) || (i.state && i.state.toLowerCase().includes(q)) || (i.location_name && i.location_name.toLowerCase().includes(q)) || (i.location && i.location.name && i.location.name.toLowerCase().includes(q)));
+  }
+  if (e.categoryId) {
+    s = s.filter(i => i.category_id === e.categoryId || (i.category && i.category.id === e.categoryId));
+  }
+  if (e.locationId) {
+    s = s.filter(i => i.location_id === e.locationId || (i.location && i.location.id === e.locationId));
+  }
+  if (e.proOnly) {
+    s = s.filter(i => i.seller && Ct(i.seller));
+  }
+  const seenU = new Set();
   s = s.filter(item => {
     const timeKey = Math.floor(new Date(item.created_at || 0).getTime() / (1000 * 300));
     const key = (item.user_id || "") + "___" + (item.title || "").trim().toLowerCase() + "___" + (item.price || 0) + "___" + timeKey;
@@ -796,7 +901,79 @@ function ta({listing:e,seller:t,isFavorited:n,onFavoriteToggle:r}){if(!e)return 
     seenU.add(key);
     return true;
   });
-  return s;}async function o1(e){  let deletedIds = [];  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}  if (deletedIds.includes(e)) return null;  let overrides = {};  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}  try {    const saved = JSON.parse(localStorage.getItem("user_custom_listings")||"[]");    const found = saved.find(l=>l&&l.id===e&&!deletedIds.includes(l.id)&&l.status!=="deleted");    if(found) {      if (overrides[found.id]) {        if (overrides[found.id].status) found.status = overrides[found.id].status;        if (overrides[found.id].is_featured !== undefined) found.is_featured = overrides[found.id].is_featured;      }      if(!found.seller && found.user_id) {        try {          const profiles = await Ic();          found.seller = profiles.find(p=>p.id===found.user_id) || { id: found.user_id, name: "Seller" };        } catch(err) {          found.seller = { id: found.user_id, name: "Seller" };        }      }      return found;    }  } catch(err){}  try {    const {data:t, error:n} = await L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("id",e).maybeSingle();    if(!n && t && !deletedIds.includes(t.id) && t.status !== "deleted") {      if (overrides[t.id]) {        if (overrides[t.id].status) t.status = overrides[t.id].status;        if (overrides[t.id].is_featured !== undefined) t.is_featured = overrides[t.id].is_featured;      }      if(!t.seller && t.user_id) {        try {          const { data: p } = await L.from("profiles").select("*").eq("id", t.user_id).maybeSingle();          if(p) t.seller = p;          else t.seller = { id: t.user_id, name: "Seller" };        } catch(err2) {          t.seller = { id: t.user_id, name: "Seller" };        }      }      return t;    }  } catch(err){}  try {    const {data:t2} = await L.from("listings").select("*").eq("id",e).maybeSingle();    if(t2 && !deletedIds.includes(t2.id) && t2.status !== "deleted") {      if (overrides[t2.id]) {        if (overrides[t2.id].status) t2.status = overrides[t2.id].status;        if (overrides[t2.id].is_featured !== undefined) t2.is_featured = overrides[t2.id].is_featured;      }      t2.seller = { id: t2.user_id, name: "Seller" };      return t2;    }  } catch(err){}  return null;}async function qp(e){  let list=[];  let deletedIds = [];  let overrides = {};  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}  try{    const{data:t,error:n}=await L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("user_id",e).neq("status","deleted").order("created_at",{ascending:!1});    if(!n&&t)list=t  }catch(err){}  if(!list||list.length===0){    try{      const{data:t2}=await L.from("listings").select("*").eq("user_id",e).neq("status","deleted").order("created_at",{ascending:!1});      if(t2)list=t2    }catch(err){}  }  try{    const saved=JSON.parse(localStorage.getItem("user_custom_listings")||"[]");    const userSaved=saved.filter(l=>l&&l.user_id===e&&l.status!=="deleted"&&!deletedIds.includes(l.id));    const map={};    list.forEach(l=>{ if(l && l.id && !deletedIds.includes(l.id)) map[l.id]=l; });    userSaved.forEach(l=>{ if(l && l.id && !deletedIds.includes(l.id)) map[l.id]=l; });    const res = Object.values(map);    res.forEach(l => {      if (overrides[l.id]) {        if (overrides[l.id].status) l.status = overrides[l.id].status;        if (overrides[l.id].is_featured !== undefined) l.is_featured = overrides[l.id].is_featured;      }    });    const filteredRes = res.filter(l => l && !deletedIds.includes(l.id) && l.status !== "deleted").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  return s;
+}async function o1(e){
+  if (!e) return null;
+  let deletedIds = [];
+  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}
+  if (deletedIds.includes(e)) return null;
+  let overrides = {};
+  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}
+  const isBadListing = (l) => {
+    if (!l || !l.id || !l.title) return true;
+    const titleStr = String(l.title).trim();
+    if (titleStr.startsWith("[SYS_") || titleStr.startsWith("SYS_") || titleStr.includes("[SYS_") || titleStr.includes("SYS_DELETED_LISTING") || titleStr.includes("SYS_RECHARGE") || titleStr.includes("SYS_APP_CONFIG") || titleStr.includes("SYS_TOP_PRO")) return true;
+    if (l.status === "deleted" || l.status === "rejected" || l.is_deleted === true) return true;
+    if (deletedIds.includes(l.id)) return true;
+    return false;
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem("user_custom_listings")||"[]");
+    const found = saved.find(l=>l&&l.id===e&&!isBadListing(l));
+    if(found) {
+      if (overrides[found.id]) {
+        if (overrides[found.id].status) found.status = overrides[found.id].status;
+        if (overrides[found.id].is_featured !== undefined) found.is_featured = overrides[found.id].is_featured;
+      }
+      if (isBadListing(found)) return null;
+      if (!Array.isArray(found.images)) found.images = [];
+      if(!found.seller && found.user_id) {
+        try {
+          const profiles = await Ic();
+          found.seller = profiles.find(p=>p.id===found.user_id) || { id: found.user_id, name: "Seller" };
+        } catch(err) {
+          found.seller = { id: found.user_id, name: "Seller" };
+        }
+      }
+      return found;
+    }
+  } catch(err){}
+  try {
+    const {data:t, error:n} = await L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("id",e).maybeSingle();
+    if(!n && t && !isBadListing(t)) {
+      if (overrides[t.id]) {
+        if (overrides[t.id].status) t.status = overrides[t.id].status;
+        if (overrides[t.id].is_featured !== undefined) t.is_featured = overrides[t.id].is_featured;
+      }
+      if (isBadListing(t)) return null;
+      if (!Array.isArray(t.images)) t.images = [];
+      if(!t.seller && t.user_id) {
+        try {
+          const { data: p } = await L.from("profiles").select("*").eq("id", t.user_id).maybeSingle();
+          if(p) t.seller = p;
+          else t.seller = { id: t.user_id, name: "Seller" };
+        } catch(err2) {
+          t.seller = { id: t.user_id, name: "Seller" };
+        }
+      }
+      return t;
+    }
+  } catch(err){}
+  try {
+    const {data:t2} = await L.from("listings").select("*").eq("id",e).maybeSingle();
+    if(t2 && !isBadListing(t2)) {
+      if (overrides[t2.id]) {
+        if (overrides[t2.id].status) t2.status = overrides[t2.id].status;
+        if (overrides[t2.id].is_featured !== undefined) t2.is_featured = overrides[t2.id].is_featured;
+      }
+      if (isBadListing(t2)) return null;
+      if (!Array.isArray(t2.images)) t2.images = [];
+      t2.seller = { id: t2.user_id, name: "Seller" };
+      return t2;
+    }
+  } catch(err){}
+  return null;
+}async function qp(e){  let list=[];  let deletedIds = [];  let overrides = {};  try { deletedIds = JSON.parse(localStorage.getItem("deleted_listing_ids") || "[]"); } catch(err) {}  try { overrides = JSON.parse(localStorage.getItem("listing_status_overrides") || "{}"); } catch(err) {}  try{    const{data:t,error:n}=await L.from("listings").select(`*, category:categories(*), location:locations(*)`).eq("user_id",e).neq("status","deleted").order("created_at",{ascending:!1});    if(!n&&t)list=t  }catch(err){}  if(!list||list.length===0){    try{      const{data:t2}=await L.from("listings").select("*").eq("user_id",e).neq("status","deleted").order("created_at",{ascending:!1});      if(t2)list=t2    }catch(err){}  }  try{    const saved=JSON.parse(localStorage.getItem("user_custom_listings")||"[]");    const userSaved=saved.filter(l=>l&&l.user_id===e&&l.status!=="deleted"&&!deletedIds.includes(l.id));    const map={};    list.forEach(l=>{ if(l && l.id && !deletedIds.includes(l.id)) map[l.id]=l; });    userSaved.forEach(l=>{ if(l && l.id && !deletedIds.includes(l.id)) map[l.id]=l; });    const res = Object.values(map);    res.forEach(l => {      if (overrides[l.id]) {        if (overrides[l.id].status) l.status = overrides[l.id].status;        if (overrides[l.id].is_featured !== undefined) l.is_featured = overrides[l.id].is_featured;      }    });    const filteredRes = res.filter(l => l && !deletedIds.includes(l.id) && l.status !== "deleted" && !String(l.title || "").startsWith("[SYS_") && !String(l.title || "").includes("SYS_DELETED_LISTING")).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     const seenQ = new Set();
     return filteredRes.filter(item => {
       const timeKey = Math.floor(new Date(item.created_at || 0).getTime() / (1000 * 300));
@@ -2624,7 +2801,7 @@ function W1(){const{user:e,profile:t}=Ae(),n=he(),r=ke(),[s,i]=m.useState(""),[l
       console.error("Chat navigation err:", err);
       r.show("Failed to start chat","error");
     }
-  },g=()=>{if(!s)return;const ph=(s.whatsapp||s.phone||(s.seller&&s.seller.phone)||"").replace(/[^0-9]/g,"");if(!ph){r.show("Seller phone number not available","error");return}const fullPh=ph.length===10?"91"+ph:ph;const S=encodeURIComponent(`Hello, I am interested in your listing: ${s.title} (Price: ${Ze(s.price)}) on Meri Local Bazaar.`);const waUrl=`https://api.whatsapp.com/send?phone=${fullPh}&text=${S}`;try{window.location.href=waUrl}catch(err){window.open(waUrl,"_blank")}};if(l)return a.jsx("div",{className:"min-h-screen flex items-center justify-center",children:a.jsx("div",{className:"animate-spin w-8 h-8 border-3 border-primary-500 border-t-transparent rounded-full"})});if(!s)return a.jsxs("div",{className:"min-h-screen flex flex-col items-center justify-center gap-4",children:[a.jsx(Re,{className:"w-12 h-12 text-gray-300"}),a.jsx("p",{className:"text-gray-500",children:"Listing not found"}),a.jsx(St,{to:"/",className:"btn-primary",children:"Go Home"})]});const y=Ct(s.seller);return a.jsxs("div",{className:"min-h-screen pb-24 md:pb-8 bg-gray-50",children:[a.jsxs("div",{className:"sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between",children:[a.jsx("button",{onClick:()=>t(-1),className:"p-2 -ml-2 rounded-lg hover:bg-gray-100",children:a.jsx(gt,{className:"w-5 h-5"})}),a.jsxs("div",{className:"flex items-center gap-1",children:[a.jsx("button",{onClick:w,className:"p-2 rounded-lg hover:bg-gray-100",children:a.jsx(Ps,{className:`w-5 h-5 ${c?"fill-primary-500 text-primary-500":"text-gray-600"}`})}),a.jsx("button",{onClick:j,className:"p-2 rounded-lg hover:bg-gray-100",children:a.jsx(Kw,{className:"w-5 h-5 text-gray-600"})})]})]}),a.jsxs("div",{className:"max-w-3xl mx-auto px-4 py-4",children:[a.jsx("div",{className:"relative rounded-2xl overflow-hidden bg-gray-100 aspect-[4/3] mb-4",children:s.images.length>0?a.jsxs(a.Fragment,{children:[a.jsx("img",{src:s.images[d],alt:s.title,className:"w-full h-full object-cover cursor-zoom-in",onClick:()=>v(!0)}),s.images.length>1&&a.jsxs(a.Fragment,{children:[a.jsx("button",{onClick:()=>h(S=>(S-1+s.images.length)%s.images.length),className:"absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 flex items-center justify-center hover:bg-white",children:a.jsx(Lw,{className:"w-5 h-5"})}),a.jsx("button",{onClick:()=>h(S=>(S+1)%s.images.length),className:"absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 flex items-center justify-center hover:bg-white",children:a.jsx(Rc,{className:"w-5 h-5"})}),a.jsxs("div",{className:"absolute bottom-3 left-1/2 -translate-x-1/2 badge bg-black/60 text-white",children:[d+1," / ",s.images.length]})]})]}):a.jsx("div",{className:"w-full h-full flex items-center justify-center text-gray-300",children:a.jsx(Re,{className:"w-12 h-12"})})}),s.images.length>1&&a.jsx("div",{className:"flex gap-2 mb-4 overflow-x-auto no-scrollbar",children:s.images.map((S,b)=>a.jsx("button",{onClick:()=>h(b),className:`w-16 h-16 rounded-lg overflow-hidden shrink-0 border-2 ${b===d?"border-primary-500":"border-transparent"}`,children:a.jsx("img",{src:S,alt:"",className:"w-full h-full object-cover"})},b))}),a.jsxs("div",{className:"card p-4 mb-4",children:[a.jsxs("div",{className:"flex items-start justify-between gap-3 mb-2",children:[a.jsx("h1",{className:"text-lg font-bold text-gray-900 flex-1",children:s.title}),s.is_featured&&a.jsxs("span",{className:"badge bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 font-bold shrink-0 shadow-sm flex items-center gap-1",children:[a.jsx(Tc,{className:"w-3.5 h-3.5 fill-slate-950 text-slate-950"}),"⭐ TOP PRO Listing"]})]}),a.jsx("p",{className:"text-2xl font-bold text-primary-600",children:Ze(s.price)}),a.jsxs("div",{className:"flex flex-wrap gap-2 mt-3 text-xs",children:[s.category&&a.jsx("span",{className:"badge bg-gray-100 text-gray-600",children:s.category.name}),a.jsx("span",{className:"badge bg-gray-100 text-gray-600 capitalize",children:s.condition}),a.jsxs("span",{className:"badge bg-gray-100 text-gray-600 flex items-center gap-0.5",children:[a.jsx(yt,{className:"w-3 h-3"})," ",formatListingLocation(s)]}),a.jsxs("span",{className:"badge bg-gray-100 text-gray-600 flex items-center gap-0.5",children:[a.jsx(Pw,{className:"w-3 h-3"})," ",Ar(s.created_at)]})]})]}),s.description&&a.jsxs("div",{className:"card p-4 mb-4",children:[a.jsx("h2",{className:"text-sm font-semibold text-gray-800 mb-2",children:"Description"}),a.jsx("p",{className:"text-sm text-gray-600 whitespace-pre-wrap leading-relaxed",children:s.description})]}),s.seller&&a.jsxs("div",{className:"card p-4 mb-4",children:[a.jsx("h2",{className:"text-sm font-semibold text-gray-800 mb-3",children:"Seller Information"}),a.jsxs("div",{className:"flex items-center gap-3",children:[a.jsx("div",{className:"w-12 h-12 rounded-full bg-gray-100 overflow-hidden shrink-0",children:s.seller.avatar_url?a.jsx("img",{src:s.seller.avatar_url,alt:"",className:"w-full h-full object-cover"}):a.jsx("div",{className:"w-full h-full flex items-center justify-center text-gray-400 font-medium",children:(k=s.seller.name)==null?void 0:k.charAt(0).toUpperCase()})}),a.jsxs("div",{className:"flex-1 min-w-0",children:[a.jsxs("div",{className:"flex items-center gap-1.5",children:[a.jsx("p",{className:"font-medium text-sm text-gray-900 truncate",children:s.seller.name}),y&&a.jsxs("span",{className:"badge bg-primary-50 text-primary-600 shrink-0",children:[a.jsx(Op,{className:"w-3 h-3"})," PRO"]})]}),a.jsxs("p",{className:"text-xs text-gray-500 mt-0.5",children:["Member since ",fr(s.seller.created_at)]}),s.seller.city&&a.jsxs("p",{className:"text-xs text-gray-500 flex items-center gap-0.5 mt-0.5",children:[a.jsx(yt,{className:"w-3 h-3"})," ",s.seller.city]})]})]})]}),a.jsxs("div",{className:"card p-4 mb-4 bg-amber-50 border-amber-100",children:[a.jsxs("div",{className:"flex items-center gap-2 mb-2",children:[a.jsx(Gw,{className:"w-4 h-4 text-amber-600"}),a.jsx("h2",{className:"text-sm font-semibold text-amber-800",children:"Safety Tips"})]}),a.jsxs("ul",{className:"text-xs text-amber-700 space-y-1 list-disc list-inside",children:[a.jsx("li",{children:"Never send money before verifying the item in person."}),a.jsx("li",{children:"Meet in a safe, public location."}),a.jsx("li",{children:"Verify seller identity and product condition before buying."})]})]})]}),a.jsxs("div",{className:"fixed bottom-0 left-0 right-0 md:relative md:bottom-auto bg-white border-t border-gray-100 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0.75rem))] flex gap-2 z-40 shadow-lg",children:[(n&&(n.id===s.user_id||(s.seller&&n.id===s.seller.id)||n.role==="super_admin"||n.role==="admin"||n.email==="silgrakmarak1309@gmail.com"||n.email==="grejamarak@gmail.com"||n.email==="megamarak8@gmail.com"||!s.user_id))?a.jsxs(a.Fragment,{children:[a.jsxs(St,{to:"/my-ads",className:"btn-outline flex-1 text-center py-2.5",children:[a.jsx(Re,{className:"w-4 h-4 mr-1.5"}),"Manage My Ads"]}),a.jsxs("button",{onClick:async()=>{if(confirm("Are you sure you want to delete this listing?")){await u1(s.id);r.show("Listing removed successfully","success");t("/my-ads")}},className:"btn-danger flex-1 py-2.5",children:[a.jsx(Un,{className:"w-4 h-4 mr-1.5"}),"Delete Listing"]})]}):a.jsxs(a.Fragment,{children:[a.jsxs("button",{onClick:g,type:"button",className:"btn-outline flex-1 text-green-600 border-green-200 hover:bg-green-50 font-semibold active:scale-95 transition-transform",children:[a.jsx(wo,{className:"w-4 h-4"})," WhatsApp"]})]}),a.jsxs("a",{href:a1(s.phone||(s.seller&&s.seller.phone)),className:"btn-outline flex-1 text-secondary-600 border-secondary-200 hover:bg-secondary-50 font-semibold active:scale-95 transition-transform",children:[a.jsx(Dp,{className:"w-4 h-4"})," Call"]}),a.jsxs("button",{onClick:f,type:"button",className:"btn-primary flex-1 font-semibold active:scale-95 transition-transform",children:[a.jsx(wo,{className:"w-4 h-4"})," Chat"]})]}),p&&a.jsxs("div",{className:"fixed inset-0 z-[60] bg-black/90 flex items-center justify-center",onClick:()=>v(!1),children:[a.jsx("button",{className:"absolute top-4 right-4 text-white p-2",onClick:()=>v(!1),children:a.jsx(Un,{className:"w-6 h-6"})}),a.jsx("img",{src:s.images[d],alt:"",className:"max-w-full max-h-full object-contain"})]})]})}function K1(){const{signIn:e,signUp:t,resetPassword:n,refreshProfile:rf,user:currU}=Ae(),r=he(),s=ke();m.useEffect(()=>{if(currU)s("/")},[currU,s]);const[i,l]=m.useState("signin"),[o,c]=m.useState(""),[u,d]=m.useState(""),[h,p]=m.useState(""),[v,x]=m.useState(!1),[showGoogleModal,setShowGoogleModal]=m.useState(!1),[customEmail,setCustomEmail]=m.useState(""),[customName,setCustomName]=m.useState("");const performGoogleSignIn=async(targetEmail,targetName)=>{
+  },g=()=>{if(!s)return;const ph=(s.whatsapp||s.phone||(s.seller&&s.seller.phone)||"").replace(/[^0-9]/g,"");if(!ph){r.show("Seller phone number not available","error");return}const fullPh=ph.length===10?"91"+ph:ph;const S=encodeURIComponent(`Hello, I am interested in your listing: ${s.title} (Price: ${Ze(s.price)}) on Meri Local Bazaar.`);const waUrl=`https://api.whatsapp.com/send?phone=${fullPh}&text=${S}`;try{window.location.href=waUrl}catch(err){window.open(waUrl,"_blank")}};if(l)return a.jsx("div",{className:"min-h-screen flex items-center justify-center",children:a.jsx("div",{className:"animate-spin w-8 h-8 border-3 border-primary-500 border-t-transparent rounded-full"})});if(!s)return a.jsxs("div",{className:"min-h-screen flex flex-col items-center justify-center gap-4",children:[a.jsx(Re,{className:"w-12 h-12 text-gray-300"}),a.jsx("p",{className:"text-gray-500",children:"Listing not found"}),a.jsx(St,{to:"/",className:"btn-primary",children:"Go Home"})]});const y=Ct(s.seller);return a.jsxs("div",{className:"min-h-screen pb-24 md:pb-8 bg-gray-50",children:[a.jsxs("div",{className:"sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between",children:[a.jsx("button",{onClick:()=>t(-1),className:"p-2 -ml-2 rounded-lg hover:bg-gray-100",children:a.jsx(gt,{className:"w-5 h-5"})}),a.jsxs("div",{className:"flex items-center gap-1",children:[a.jsx("button",{onClick:w,className:"p-2 rounded-lg hover:bg-gray-100",children:a.jsx(Ps,{className:`w-5 h-5 ${c?"fill-primary-500 text-primary-500":"text-gray-600"}`})}),a.jsx("button",{onClick:j,className:"p-2 rounded-lg hover:bg-gray-100",children:a.jsx(Kw,{className:"w-5 h-5 text-gray-600"})})]})]}),a.jsxs("div",{className:"max-w-3xl mx-auto px-4 py-4",children:[a.jsx("div",{className:"relative rounded-2xl overflow-hidden bg-gray-100 aspect-[4/3] mb-4",children:(s.images&&s.images.length>0)?a.jsxs(a.Fragment,{children:[a.jsx("img",{src:s.images[d],alt:s.title,className:"w-full h-full object-cover cursor-zoom-in",onClick:()=>v(!0)}),s.images.length>1&&a.jsxs(a.Fragment,{children:[a.jsx("button",{onClick:()=>h(S=>(S-1+s.images.length)%s.images.length),className:"absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 flex items-center justify-center hover:bg-white",children:a.jsx(Lw,{className:"w-5 h-5"})}),a.jsx("button",{onClick:()=>h(S=>(S+1)%s.images.length),className:"absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 flex items-center justify-center hover:bg-white",children:a.jsx(Rc,{className:"w-5 h-5"})}),a.jsxs("div",{className:"absolute bottom-3 left-1/2 -translate-x-1/2 badge bg-black/60 text-white",children:[d+1," / ",s.images.length]})]})]}):a.jsx("div",{className:"w-full h-full flex items-center justify-center text-gray-300",children:a.jsx(Re,{className:"w-12 h-12"})})}),s.images.length>1&&a.jsx("div",{className:"flex gap-2 mb-4 overflow-x-auto no-scrollbar",children:s.images.map((S,b)=>a.jsx("button",{onClick:()=>h(b),className:`w-16 h-16 rounded-lg overflow-hidden shrink-0 border-2 ${b===d?"border-primary-500":"border-transparent"}`,children:a.jsx("img",{src:S,alt:"",className:"w-full h-full object-cover"})},b))}),a.jsxs("div",{className:"card p-4 mb-4",children:[a.jsxs("div",{className:"flex items-start justify-between gap-3 mb-2",children:[a.jsx("h1",{className:"text-lg font-bold text-gray-900 flex-1",children:s.title}),s.is_featured&&a.jsxs("span",{className:"badge bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 font-bold shrink-0 shadow-sm flex items-center gap-1",children:[a.jsx(Tc,{className:"w-3.5 h-3.5 fill-slate-950 text-slate-950"}),"⭐ TOP PRO Listing"]})]}),a.jsx("p",{className:"text-2xl font-bold text-primary-600",children:Ze(s.price)}),a.jsxs("div",{className:"flex flex-wrap gap-2 mt-3 text-xs",children:[s.category&&a.jsx("span",{className:"badge bg-gray-100 text-gray-600",children:s.category.name}),a.jsx("span",{className:"badge bg-gray-100 text-gray-600 capitalize",children:s.condition}),a.jsxs("span",{className:"badge bg-gray-100 text-gray-600 flex items-center gap-0.5",children:[a.jsx(yt,{className:"w-3 h-3"})," ",formatListingLocation(s)]}),a.jsxs("span",{className:"badge bg-gray-100 text-gray-600 flex items-center gap-0.5",children:[a.jsx(Pw,{className:"w-3 h-3"})," ",Ar(s.created_at)]})]})]}),s.description&&a.jsxs("div",{className:"card p-4 mb-4",children:[a.jsx("h2",{className:"text-sm font-semibold text-gray-800 mb-2",children:"Description"}),a.jsx("p",{className:"text-sm text-gray-600 whitespace-pre-wrap leading-relaxed",children:s.description})]}),s.seller&&a.jsxs("div",{className:"card p-4 mb-4",children:[a.jsx("h2",{className:"text-sm font-semibold text-gray-800 mb-3",children:"Seller Information"}),a.jsxs("div",{className:"flex items-center gap-3",children:[a.jsx("div",{className:"w-12 h-12 rounded-full bg-gray-100 overflow-hidden shrink-0",children:s.seller.avatar_url?a.jsx("img",{src:s.seller.avatar_url,alt:"",className:"w-full h-full object-cover"}):a.jsx("div",{className:"w-full h-full flex items-center justify-center text-gray-400 font-medium",children:(k=s.seller.name)==null?void 0:k.charAt(0).toUpperCase()})}),a.jsxs("div",{className:"flex-1 min-w-0",children:[a.jsxs("div",{className:"flex items-center gap-1.5",children:[a.jsx("p",{className:"font-medium text-sm text-gray-900 truncate",children:s.seller.name}),y&&a.jsxs("span",{className:"badge bg-primary-50 text-primary-600 shrink-0",children:[a.jsx(Op,{className:"w-3 h-3"})," PRO"]})]}),a.jsxs("p",{className:"text-xs text-gray-500 mt-0.5",children:["Member since ",fr(s.seller.created_at)]}),s.seller.city&&a.jsxs("p",{className:"text-xs text-gray-500 flex items-center gap-0.5 mt-0.5",children:[a.jsx(yt,{className:"w-3 h-3"})," ",s.seller.city]})]})]})]}),a.jsxs("div",{className:"card p-4 mb-4 bg-amber-50 border-amber-100",children:[a.jsxs("div",{className:"flex items-center gap-2 mb-2",children:[a.jsx(Gw,{className:"w-4 h-4 text-amber-600"}),a.jsx("h2",{className:"text-sm font-semibold text-amber-800",children:"Safety Tips"})]}),a.jsxs("ul",{className:"text-xs text-amber-700 space-y-1 list-disc list-inside",children:[a.jsx("li",{children:"Never send money before verifying the item in person."}),a.jsx("li",{children:"Meet in a safe, public location."}),a.jsx("li",{children:"Verify seller identity and product condition before buying."})]})]})]}),a.jsxs("div",{className:"fixed bottom-0 left-0 right-0 md:relative md:bottom-auto bg-white border-t border-gray-100 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0.75rem))] flex gap-2 z-40 shadow-lg",children:[(n&&(n.id===s.user_id||(s.seller&&n.id===s.seller.id)||n.role==="super_admin"||n.role==="admin"||n.email==="silgrakmarak1309@gmail.com"||n.email==="grejamarak@gmail.com"||n.email==="megamarak8@gmail.com"||!s.user_id))?a.jsxs(a.Fragment,{children:[a.jsxs(St,{to:"/my-ads",className:"btn-outline flex-1 text-center py-2.5",children:[a.jsx(Re,{className:"w-4 h-4 mr-1.5"}),"Manage My Ads"]}),a.jsxs("button",{onClick:async()=>{if(confirm("Are you sure you want to delete this listing?")){await u1(s.id);r.show("Listing removed successfully","success");t("/my-ads")}},className:"btn-danger flex-1 py-2.5",children:[a.jsx(Un,{className:"w-4 h-4 mr-1.5"}),"Delete Listing"]})]}):a.jsxs(a.Fragment,{children:[a.jsxs("button",{onClick:g,type:"button",className:"btn-outline flex-1 text-green-600 border-green-200 hover:bg-green-50 font-semibold active:scale-95 transition-transform",children:[a.jsx(wo,{className:"w-4 h-4"})," WhatsApp"]})]}),a.jsxs("a",{href:a1(s.phone||(s.seller&&s.seller.phone)),className:"btn-outline flex-1 text-secondary-600 border-secondary-200 hover:bg-secondary-50 font-semibold active:scale-95 transition-transform",children:[a.jsx(Dp,{className:"w-4 h-4"})," Call"]}),a.jsxs("button",{onClick:f,type:"button",className:"btn-primary flex-1 font-semibold active:scale-95 transition-transform",children:[a.jsx(wo,{className:"w-4 h-4"})," Chat"]})]}),p&&a.jsxs("div",{className:"fixed inset-0 z-[60] bg-black/90 flex items-center justify-center",onClick:()=>v(!1),children:[a.jsx("button",{className:"absolute top-4 right-4 text-white p-2",onClick:()=>v(!1),children:a.jsx(Un,{className:"w-6 h-6"})}),a.jsx("img",{src:s.images[d],alt:"",className:"max-w-full max-h-full object-contain"})]})]})}function K1(){const{signIn:e,signUp:t,resetPassword:n,refreshProfile:rf,user:currU}=Ae(),r=he(),s=ke();m.useEffect(()=>{if(currU)s("/")},[currU,s]);const[i,l]=m.useState("signin"),[o,c]=m.useState(""),[u,d]=m.useState(""),[h,p]=m.useState(""),[v,x]=m.useState(!1),[showGoogleModal,setShowGoogleModal]=m.useState(!1),[customEmail,setCustomEmail]=m.useState(""),[customName,setCustomName]=m.useState("");const performGoogleSignIn=async(targetEmail,targetName)=>{
   x(!0);
   try{
     const cleanEmail = (targetEmail || "").toLowerCase().trim();
